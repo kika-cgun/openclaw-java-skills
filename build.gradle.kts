@@ -6,7 +6,7 @@ plugins {
 
 group = "com.piotr-capecki"
 version = "0.0.1-SNAPSHOT"
-description = "OpenClaw Career Agent"
+description = "OpenClaw — Multi-skill AI agent platform"
 
 java {
     toolchain {

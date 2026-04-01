@@ -1,46 +1,76 @@
-# Job Scraping & Scoring Feature — Design Spec
+# CareerAgent Skill — Design Spec
 
 **Date:** 2026-04-01
-**Project:** OpenClaw Career Agent
+**Project:** OpenClaw Platform
 **Status:** Approved
 
 ---
 
-## Overview
+## Context
 
-A scheduled feature within the OpenClaw Career Agent Spring Boot application that:
+OpenClaw is a **multi-skill AI agent platform** running on a personal VPS. Each skill is a self-contained module with its own data collection, AI evaluation, and notification logic. All skills share platform-level infrastructure: an OpenRouter AI client, a Telegram notifier, and Spring Security.
+
+Current skills:
+- **CareerAgent** ← this spec
+- **PersonalOps** ← planned (VPS monitoring, backups, service health, alerts)
+
+---
+
+## CareerAgent Overview
+
+A scheduled skill within the OpenClaw platform that:
 1. Scrapes job/internship listings from multiple sources daily
 2. Deduplicates against PostgreSQL history
-3. Scores new offers using Claude AI against a user-defined profile
+3. Scores new offers using Claude AI (via OpenRouter) against a user-defined profile
 4. Sends a single daily Telegram digest grouped by match quality
 
 ---
 
-## Architecture
+## Platform Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Scheduler (cron)                    │
-└──────────────────────┬──────────────────────────────┘
-                       │ daily trigger
-┌──────────────────────▼──────────────────────────────┐
-│              JobIngestionService                     │
-│  1. calls all scrapers                               │
-│  2. deduplicates by URL hash vs DB                   │
-│  3. saves new offers as PENDING_SCORE                │
-└──────────┬───────────────────────────┬──────────────┘
-           │                           │
-┌──────────▼──────┐         ┌──────────▼──────────────┐
-│  JobScraper[]   │         │    ScoringService        │
-│  - JustJoinIT   │         │  batch prompt → Claude   │
-│  - NoFluffJobs  │         │  returns score + reason  │
-│  - JIT.team     │         └──────────┬───────────────┘
-│  - Amazon       │                    │
-│  - Deloitte     │         ┌──────────▼───────────────┐
-└─────────────────┘         │   TelegramNotifier       │
-                            │  builds daily digest     │
-                            │  💚 STRONG / 🟡 MEDIUM   │
-                            └──────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      OpenClaw Platform                        │
+│                                                              │
+│  ┌───────────────────────┐   ┌──────────────────────────┐   │
+│  │    CareerAgent Skill  │   │   PersonalOps Skill      │   │
+│  │                       │   │   (planned)              │   │
+│  │  Scrapers             │   │                          │   │
+│  │  JobIngestionService  │   │  Monitors                │   │
+│  │  CareerScoringService │   │  OpsScoringService       │   │
+│  │  CareerScheduler      │   │  OpsScheduler            │   │
+│  │  REST /api/career/**  │   │  REST /api/ops/**        │   │
+│  └──────────┬────────────┘   └──────────┬───────────────┘   │
+│             │                           │                    │
+│  ┌──────────▼───────────────────────────▼───────────────┐   │
+│  │                  Core Infrastructure                  │   │
+│  │   OpenRouterClient │ TelegramClient │ SecurityConfig  │   │
+│  └──────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## CareerAgent — Internal Flow
+
+```
+CareerScheduler (@Scheduled daily)
+    │
+    ▼
+JobIngestionService
+    ├── calls all JobScraper implementations
+    ├── deduplicates by URL hash vs DB
+    └── saves new offers as PENDING_SCORE
+    │
+    ▼
+CareerScoringService
+    ├── loads PENDING_SCORE offers + user profile
+    ├── builds batch prompt
+    └── calls OpenRouterClient → Claude scores all offers
+    │
+    ▼
+TelegramClient (core)
+    └── sends daily digest: 💚 STRONG / 🟡 MEDIUM
 ```
 
 ---
@@ -50,11 +80,11 @@ A scheduled feature within the OpenClaw Career Agent Spring Boot application tha
 | Source | Integration method | Notes |
 |--------|--------------------|-------|
 | JustJoinIT | Public REST API | `GET /api/offers` |
-| No Fluff Jobs | Public REST API | `POST /api/v2/postings` with filters |
+| No Fluff Jobs | Public REST API | `POST /api/v2/postings` |
 | JIT.team | HTTP scraping (Jsoup) | Simple HTML structure |
 | Amazon Jobs | HTTP scraping (Jsoup) | Careers page, paginated |
 | Deloitte Jobs | HTTP scraping (Jsoup) | Careers page |
-| LinkedIn | **Not in scope** | Blocked by anti-scraping; add later if needed |
+| LinkedIn | **Not in scope** | Anti-scraping; add later if needed |
 
 ---
 
@@ -71,7 +101,7 @@ public interface JobScraper {
 
 `RawJobOffer` fields: `title`, `company`, `location`, `url`, `description`, `source`.
 
-Spring autowires all `@Component` implementations as `List<JobScraper>`. Adding a new source requires only a new class — no changes to `JobIngestionService`.
+Spring autowires all `@Component` implementations as `List<JobScraper>`. Adding a new source requires only a new class.
 
 ---
 
@@ -81,10 +111,10 @@ Spring autowires all `@Component` implementations as `List<JobScraper>`. Adding 
 -- User profile (editable via REST)
 user_profile (
   id           BIGSERIAL PRIMARY KEY,
-  stack        TEXT[],       -- e.g. ["Java", "Spring Boot", "SQL"]
-  level        TEXT[],       -- e.g. ["intern", "junior"]
-  locations    TEXT[],       -- e.g. ["Gdańsk", "Gdynia", "Sopot", "remote"]
-  preferences  TEXT,         -- free text fed directly to Claude as context
+  stack        TEXT,         -- comma-separated, e.g. "Java,Spring Boot,SQL"
+  level        TEXT,         -- comma-separated, e.g. "intern,junior"
+  locations    TEXT,         -- comma-separated, e.g. "Gdańsk,Gdynia,Sopot,remote"
+  preferences  TEXT,         -- free text fed to Claude as context
   updated_at   TIMESTAMP
 )
 
@@ -116,9 +146,19 @@ scrape_runs (
 
 ---
 
-## AI Scoring
+## AI Scoring (via OpenRouter)
 
-`ScoringService` collects all `PENDING_SCORE` offers after ingestion and sends them to Claude in a single batch prompt. Batch approach reduces API calls and cost vs. one-call-per-offer.
+`CareerScoringService` collects all `PENDING_SCORE` offers and sends them to Claude in a single batch prompt through `OpenRouterClient`. Batch approach reduces API calls vs. one-call-per-offer.
+
+**OpenRouter call:**
+```
+POST https://openrouter.ai/api/v1/chat/completions
+Authorization: Bearer <OPENROUTER_API_KEY>
+{
+  "model": "anthropic/claude-sonnet-4-5",
+  "messages": [{ "role": "user", "content": "<prompt>" }]
+}
+```
 
 **Prompt structure:**
 ```
@@ -128,109 +168,160 @@ You are evaluating job offers for a candidate with the following profile:
 - Locations: {locations}
 - Preferences: {preferences}
 
-For each offer below, return a JSON array with score and reason.
-Score values: STRONG | MEDIUM | SKIP
+For each offer below, return ONLY a JSON array. Each element:
+  "offerId" (string), "score" (STRONG | MEDIUM | SKIP), "reason" (Polish, max 100 chars)
 
-Offers:
-[{ "offerId": "...", "title": "...", "company": "...", "location": "...", "description": "..." }, ...]
+Offers: [...]
 ```
 
-**Claude response format:**
+**Response format:**
 ```json
 [
-  { "offerId": "abc-123", "score": "STRONG", "reason": "Java 21, Spring Boot, remote, junior — ideal match" },
-  { "offerId": "def-456", "score": "MEDIUM", "reason": "Java yes, but requires 2 years exp and Warsaw only" },
-  { "offerId": "ghi-789", "score": "SKIP",   "reason": "React frontend, not backend Java" }
+  { "offerId": "abc-123", "score": "STRONG", "reason": "Java 21, Spring Boot, remote, junior — idealne" },
+  { "offerId": "def-456", "score": "MEDIUM", "reason": "Java tak, ale wymaga 2 lat i tylko Warszawa" },
+  { "offerId": "ghi-789", "score": "SKIP",   "reason": "React frontend, nie backend Java" }
 ]
 ```
-
-After scoring, `job_offers.score` and `job_offers.score_reason` are updated.
 
 ---
 
 ## Telegram Digest
 
-One message per day, sent only when there are STRONG or MEDIUM offers unsent (`sent_at IS NULL`).
+One message per day, only when STRONG or MEDIUM unsent offers exist (`sent_at IS NULL`). SKIP offers never sent.
 
-**Message format:**
 ```
-🔍 OpenClaw — Daily Job Report [2026-04-01]
+🔍 OpenClaw — Daily Job Report [2026-04-02]
 
-💚 Strong matches (2)
+💚 Mocne dopasowania (2)
 • Junior Java Developer @ Nordea — Gdańsk/remote
   https://...
-• Backend Intern @ JIT.team — Trójmiasto
-  https://...
 
-🟡 Medium matches (3)
+🟡 Średnie dopasowania (3)
 • Java Developer @ Deloitte — Warszawa (remote possible)
   https://...
-...
 
-📊 Scanned 47 offers across 5 sources. 12 new today.
+📊 Przeskanowano 47 ofert z 5 źródeł. 12 nowych dzisiaj.
 ```
-
-SKIP offers are never sent to Telegram.
 
 ---
 
 ## REST API
 
-All endpoints secured with Spring Security using a static API key passed as `X-API-Key` header (configured in `application.yaml`). Sufficient for a single-user VPS deployment.
+Secured with `X-API-Key` header (static key from `application.yaml`).
 
 ```
 # User profile
-GET    /api/profile              — get current profile
-PATCH  /api/profile              — partial update of profile
+GET    /api/career/profile       — get current profile
+PATCH  /api/career/profile       — partial update
 
 # Job offers
-GET    /api/offers               — list offers (query params: score, source, from, to)
-GET    /api/offers/{id}          — offer detail
+GET    /api/career/offers        — list offers (query params: score, source, from, to)
+GET    /api/career/offers/{id}   — offer detail
 
 # Operations
-POST   /api/scrape/run           — trigger manual scrape run
-GET    /api/scrape/runs          — list scrape run history
+POST   /api/career/scrape/run    — trigger manual scrape
+GET    /api/career/scrape/runs   — scrape run history
 ```
+
+> Future skills use `/api/ops/**`, `/api/finance/**` etc. — no conflicts.
 
 ---
 
 ## Scheduling
 
-Single `@Scheduled(cron = "0 0 8 * * *")` bean (8:00 AM daily, server timezone) that:
-1. Triggers `JobIngestionService.ingest()`
-2. Triggers `ScoringService.scoreAllPending()`
-3. Triggers `TelegramNotifier.sendDailyDigest()`
+`CareerScheduler` runs daily at 8:00 AM (server timezone):
 
-Each step is independently callable via REST for manual triggering and development.
+```java
+@Scheduled(cron = "0 0 8 * * *")
+public void runDailyPipeline() {
+    jobIngestionService.ingest();
+    careerScoringService.scoreAllPending();
+    telegramClient.sendCareerDigest();
+}
+```
+
+Each step also callable via REST for manual triggering and development.
 
 ---
 
 ## Error Handling
 
-- **Per-scraper failures** are caught and logged; failed sources are recorded in `scrape_runs.status = PARTIAL`. Other sources continue.
-- **Claude API failure** — offers remain `PENDING_SCORE`; retried on next run.
+- **Per-scraper failures** — caught and logged; `scrape_runs.status = PARTIAL`. Other scrapers continue.
+- **OpenRouter failure** — offers remain `PENDING_SCORE`; retried on next run.
 - **Telegram failure** — logged, `sent_at` not updated; retried on next run.
 
 ---
 
-## Key Dependencies to Add
+## Package Structure
 
-```kotlin
-// build.gradle.kts additions
-implementation("org.jsoup:jsoup:1.17.2")
-implementation("com.squareup.okhttp3:okhttp:4.12.0")
-implementation("com.anthropic:sdk:0.8.0")   // Claude Java SDK
-implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-implementation("org.flywaydb:flyway-core")  // DB migrations
 ```
-
-Telegram notification via direct HTTPS call to Bot API (no extra library needed).
+com.piotrcapecki.openclaw/
+├── OpenClawApplication.java
+├── core/
+│   ├── ai/
+│   │   └── OpenRouterClient.java        # generic AI client (used by all skills)
+│   ├── notification/
+│   │   └── TelegramClient.java          # generic Telegram sender (used by all skills)
+│   └── config/
+│       └── SecurityConfig.java          # X-API-Key filter
+└── skill/
+    └── career/
+        ├── domain/
+        │   ├── JobOffer.java
+        │   ├── UserProfile.java
+        │   ├── ScrapeRun.java
+        │   ├── JobSource.java            (enum)
+        │   ├── OfferScore.java           (enum)
+        │   └── StringListConverter.java
+        ├── repository/
+        │   ├── JobOfferRepository.java
+        │   ├── UserProfileRepository.java
+        │   └── ScrapeRunRepository.java
+        ├── scraper/
+        │   ├── JobScraper.java           (interface)
+        │   ├── RawJobOffer.java          (record)
+        │   ├── JustJoinItScraper.java
+        │   ├── NoFluffJobsScraper.java
+        │   ├── JitTeamScraper.java
+        │   ├── AmazonJobsScraper.java
+        │   └── DeloitteJobsScraper.java
+        ├── service/
+        │   ├── JobIngestionService.java
+        │   └── CareerScoringService.java
+        ├── scheduler/
+        │   └── CareerScheduler.java
+        ├── api/
+        │   ├── ProfileController.java
+        │   ├── OffersController.java
+        │   └── ScrapeController.java
+        └── dto/
+            ├── UserProfileDto.java
+            ├── JobOfferDto.java
+            ├── ScrapeRunDto.java
+            └── ScoreResultDto.java
+```
 
 ---
 
-## Out of Scope
+## Key Dependencies
+
+```kotlin
+implementation("org.jsoup:jsoup:1.17.2")
+implementation("com.squareup.okhttp3:okhttp:4.12.0")   // HTTP client + used by OpenRouter calls
+implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+implementation("org.flywaydb:flyway-core")
+implementation("org.flywaydb:flyway-database-postgresql")
+// No Anthropic SDK — OpenRouter uses OpenAI-compatible REST API, called via OkHttp
+```
+
+Telegram notifications via `java.net.http.HttpClient` (no extra dependency).
+
+---
+
+## Out of Scope (this spec)
 
 - LinkedIn scraping
 - Web UI / dashboard (REST API only)
 - Multi-user support
 - CV parsing
+- PersonalOps skill (separate spec)

@@ -1,1 +1,1 @@
-rootProject.name = "OpenClaw_Career_Agent"
+rootProject.name = "openclaw"
