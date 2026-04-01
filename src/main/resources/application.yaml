@@ -1,3 +1,27 @@
 spring:
   application:
     name: OpenClaw
+  datasource:
+    url: jdbc:postgresql://localhost:5432/openclaw
+    username: ${DB_USERNAME:openclaw}
+    password: ${DB_PASSWORD:openclaw}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+openrouter:
+  api-key: ${OPENROUTER_API_KEY}
+  model: ${OPENROUTER_MODEL:anthropic/claude-sonnet-4-5}
+  base-url: https://openrouter.ai/api/v1
+
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN}
+  chat-id: ${TELEGRAM_CHAT_ID}
+
+app:
+  api-key: ${APP_API_KEY:changeme}
