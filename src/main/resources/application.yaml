@@ -24,4 +24,4 @@ telegram:
   chat-id: ${TELEGRAM_CHAT_ID}
 
 app:
-  api-key: ${APP_API_KEY:changeme}
+  api-key: ${APP_API_KEY}
