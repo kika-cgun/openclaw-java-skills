@@ -14,22 +14,25 @@ import java.util.Map;
 @Slf4j
 public class OpenRouterClient {
 
-    private static final String API_URL = "https://openrouter.ai/api/v1/chat/completions";
     private static final MediaType JSON = MediaType.parse("application/json");
 
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String apiKey;
     private final String model;
+    private final String apiUrl;
 
     public OpenRouterClient(
             OkHttpClient httpClient,
+            ObjectMapper objectMapper,
             @Value("${openrouter.api-key}") String apiKey,
-            @Value("${openrouter.model}") String model) {
+            @Value("${openrouter.model}") String model,
+            @Value("${openrouter.base-url}") String baseUrl) {
         this.httpClient = httpClient;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.model = model;
+        this.apiUrl = baseUrl + "/chat/completions";
     }
 
     /**
@@ -38,24 +41,35 @@ public class OpenRouterClient {
      */
     public String complete(String userPrompt) {
         try {
+            log.debug("Calling OpenRouter model={} promptLength={}", model, userPrompt.length());
+
             String body = objectMapper.writeValueAsString(Map.of(
                     "model", model,
                     "messages", List.of(Map.of("role", "user", "content", userPrompt))
             ));
 
             Request request = new Request.Builder()
-                    .url(API_URL)
+                    .url(apiUrl)
                     .post(RequestBody.create(body, JSON))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    throw new RuntimeException("OpenRouter error: HTTP " + response.code());
+                if (!response.isSuccessful()) {
+                    String errorBody = response.body() != null ? response.body().string() : "(no body)";
+                    log.error("OpenRouter HTTP error {}: {}", response.code(), errorBody);
+                    throw new RuntimeException("OpenRouter error: HTTP " + response.code() + " — " + errorBody);
+                }
+                if (response.body() == null) {
+                    throw new RuntimeException("OpenRouter returned HTTP 200 with no response body");
                 }
                 JsonNode root = objectMapper.readTree(response.body().string());
-                return root.path("choices").get(0).path("message").path("content").asText();
+                JsonNode choices = root.path("choices");
+                if (!choices.isArray() || choices.isEmpty()) {
+                    throw new RuntimeException("OpenRouter returned no choices. Full response: " + root);
+                }
+                return choices.get(0).path("message").path("content").asText();
             }
         } catch (RuntimeException e) {
             throw e;

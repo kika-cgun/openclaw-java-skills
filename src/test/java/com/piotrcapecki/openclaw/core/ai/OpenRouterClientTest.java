@@ -1,5 +1,6 @@
 package com.piotrcapecki.openclaw.core.ai;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +36,7 @@ class OpenRouterClientTest {
         when(httpClient.newCall(any())).thenReturn(call);
         when(call.execute()).thenReturn(response);
 
-        OpenRouterClient client = new OpenRouterClient(httpClient, "test-key", "anthropic/claude-sonnet-4-5");
+        OpenRouterClient client = new OpenRouterClient(httpClient, new ObjectMapper(), "test-key", "anthropic/claude-sonnet-4-5", "https://openrouter.ai/api/v1");
         String result = client.complete("Say hello");
 
         assertThat(result).isEqualTo("Hello from Claude");
@@ -53,11 +54,12 @@ class OpenRouterClientTest {
         when(httpClient.newCall(any())).thenReturn(call);
         when(call.execute()).thenReturn(response);
 
-        OpenRouterClient client = new OpenRouterClient(httpClient, "test-key", "anthropic/claude-sonnet-4-5");
+        OpenRouterClient client = new OpenRouterClient(httpClient, new ObjectMapper(), "test-key", "anthropic/claude-sonnet-4-5", "https://openrouter.ai/api/v1");
 
-        org.junit.jupiter.api.Assertions.assertThrows(
+        RuntimeException ex = org.junit.jupiter.api.Assertions.assertThrows(
                 RuntimeException.class,
                 () -> client.complete("Say hello")
         );
+        org.assertj.core.api.Assertions.assertThat(ex.getMessage()).contains("429");
     }
 }
