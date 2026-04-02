@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -35,12 +36,12 @@ public class JustJoinItScraper implements JobScraper {
                 .url(API_URL).header("Accept", "application/json").build();
 
         try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful() || response.body() == null) {
+            ResponseBody body = response.body();
+            if (!response.isSuccessful() || body == null) {
                 log.warn("JustJoinIT API returned {}", response.code());
                 return List.of();
             }
-
-            JsonNode offers = objectMapper.readTree(response.body().string());
+            JsonNode offers = objectMapper.readTree(body.string());
             List<RawJobOffer> result = new ArrayList<>();
 
             for (JsonNode offer : offers) {
@@ -78,6 +79,6 @@ public class JustJoinItScraper implements JobScraper {
     }
 
     private boolean isRemote(JsonNode o) {
-        return o.path("workplace_type").asText().toLowerCase().contains("remote");
+        return "remote".equals(o.path("workplace_type").asText().toLowerCase());
     }
 }

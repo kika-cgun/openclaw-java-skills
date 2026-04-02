@@ -66,5 +66,6 @@ class JustJoinItScraperTest {
         assertThat(offers).hasSize(1);
         assertThat(offers.get(0).title()).isEqualTo("Junior Java Developer");
         assertThat(offers.get(0).source()).isEqualTo(JobSource.JUSTJOINIT);
+        assertThat(offers.get(0).url()).isEqualTo("https://justjoin.it/offers/nordea-junior-java");
     }
 }
