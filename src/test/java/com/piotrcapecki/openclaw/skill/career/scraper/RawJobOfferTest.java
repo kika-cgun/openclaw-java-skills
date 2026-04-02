@@ -16,6 +16,10 @@ class RawJobOfferTest {
         );
 
         assertThat(offer.title()).isEqualTo("Junior Java Developer");
+        assertThat(offer.company()).isEqualTo("Nordea");
+        assertThat(offer.location()).isEqualTo("Gdańsk / remote");
+        assertThat(offer.url()).isEqualTo("https://justjoin.it/offers/nordea-junior-java");
+        assertThat(offer.description()).isEqualTo("We are looking for a junior Java developer...");
         assertThat(offer.source()).isEqualTo(JobSource.JUSTJOINIT);
     }
 }
