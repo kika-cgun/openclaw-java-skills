@@ -32,5 +32,6 @@ class JitTeamScraperTest {
         assertThat(offers.get(0).title()).isEqualTo("Junior Java Developer");
         assertThat(offers.get(0).company()).isEqualTo("JIT.team");
         assertThat(offers.get(0).url()).isEqualTo("https://jit.team/praca/junior-java");
+        assertThat(offers.get(0).source()).isEqualTo(JobSource.JIT);
     }
 }

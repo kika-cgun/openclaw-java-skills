@@ -19,7 +19,6 @@ public class JitTeamScraper implements JobScraper {
     // ⚠️ Verify selectors against the live page before production
     private static final String OFFER_SEL    = "div.job-offer";
     private static final String TITLE_SEL    = "h2.job-title";
-    private static final String COMPANY_SEL  = "span.company";
     private static final String LOCATION_SEL = "span.location";
     private static final String LINK_SEL     = "a.job-link";
 
@@ -34,14 +33,13 @@ public class JitTeamScraper implements JobScraper {
             for (Element el : doc.select(OFFER_SEL)) {
                 String title = el.select(TITLE_SEL).text();
                 if (title.isBlank()) continue;
-                String company = el.select(COMPANY_SEL).text();
                 String location = el.select(LOCATION_SEL).text();
                 String href = el.select(LINK_SEL).attr("href");
                 String url = href.startsWith("http") ? href : BASE_URL + href;
                 result.add(new RawJobOffer(
                         title,
-                        company.isBlank() ? "JIT.team" : company,
-                        location.isBlank() ? "Gdańsk" : location,
+                        "JIT.team",
+                        location.isBlank() ? "Poland" : location,
                         url,
                         title + " — " + location,
                         JobSource.JIT));
