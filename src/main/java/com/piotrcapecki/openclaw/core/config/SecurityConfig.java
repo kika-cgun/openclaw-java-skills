@@ -58,6 +58,11 @@ public class SecurityConfig {
                     response.getWriter().write("{\"error\":\"Invalid or missing X-API-Key\"}");
                 }
             }
+
+            @Override
+            protected boolean shouldNotFilter(HttpServletRequest request) {
+                return !request.getRequestURI().startsWith("/api/");
+            }
         };
     }
 }
