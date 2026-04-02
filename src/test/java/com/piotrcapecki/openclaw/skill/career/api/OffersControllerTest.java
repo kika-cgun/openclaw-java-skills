@@ -49,6 +49,19 @@ class OffersControllerTest {
     }
 
     @Test
+    void getOfferByIdReturns200() throws Exception {
+        UUID id = UUID.randomUUID();
+        JobOffer offer = JobOffer.builder().id(id)
+                .title("Junior Java Dev").company("Nordea").location("Gdańsk")
+                .source(JobSource.JUSTJOINIT).score(OfferScore.STRONG).build();
+        when(jobOfferRepository.findById(id)).thenReturn(Optional.of(offer));
+
+        mockMvc.perform(get("/api/career/offers/" + id).header("X-API-Key", "changeme"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Junior Java Dev"));
+    }
+
+    @Test
     void getOfferByIdReturns404WhenNotFound() throws Exception {
         UUID id = UUID.randomUUID();
         when(jobOfferRepository.findById(id)).thenReturn(Optional.empty());

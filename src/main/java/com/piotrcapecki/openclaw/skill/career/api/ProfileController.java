@@ -5,6 +5,7 @@ import com.piotrcapecki.openclaw.skill.career.dto.UserProfileDto;
 import com.piotrcapecki.openclaw.skill.career.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,6 +31,7 @@ public class ProfileController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Transactional
     @PatchMapping
     public ResponseEntity<UserProfileDto> patchProfile(@RequestBody Map<String, Object> updates) {
         UserProfile profile = userProfileRepository.findFirstByOrderByIdAsc()
@@ -45,5 +47,8 @@ public class ProfileController {
     }
 
     @SuppressWarnings("unchecked")
-    private List<String> castList(Object value) { return (List<String>) value; }
+    private List<String> castList(Object value) {
+        if (value == null) return List.of();
+        return ((List<?>) value).stream().map(Object::toString).toList();
+    }
 }
