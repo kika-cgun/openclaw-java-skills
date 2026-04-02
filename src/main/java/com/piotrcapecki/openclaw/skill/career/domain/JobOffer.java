@@ -7,11 +7,14 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "job_offers")
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter @Setter @ToString
+@NoArgsConstructor @AllArgsConstructor @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class JobOffer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
     private UUID id;
 
     @Enumerated(EnumType.STRING)

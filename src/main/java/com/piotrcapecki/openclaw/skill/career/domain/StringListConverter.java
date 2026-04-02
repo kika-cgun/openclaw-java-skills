@@ -2,6 +2,7 @@ package com.piotrcapecki.openclaw.skill.career.domain;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -17,6 +18,6 @@ public class StringListConverter implements AttributeConverter<List<String>, Str
     @Override
     public List<String> convertToEntityAttribute(String data) {
         if (data == null || data.isBlank()) return List.of();
-        return Arrays.asList(data.split(","));
+        return new ArrayList<>(Arrays.asList(data.split(",")));
     }
 }

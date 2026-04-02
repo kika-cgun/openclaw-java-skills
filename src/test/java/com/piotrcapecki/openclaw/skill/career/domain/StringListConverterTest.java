@@ -29,4 +29,9 @@ class StringListConverterTest {
     void convertsNullToEmptyList() {
         assertThat(converter.convertToEntityAttribute(null)).isEmpty();
     }
+
+    @Test
+    void convertsBlankStringToEmptyList() {
+        assertThat(converter.convertToEntityAttribute("")).isEmpty();
+    }
 }

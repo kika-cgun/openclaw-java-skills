@@ -7,11 +7,14 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "scrape_runs")
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter @Setter @ToString
+@NoArgsConstructor @AllArgsConstructor @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ScrapeRun {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @EqualsAndHashCode.Include
     private UUID id;
 
     private LocalDateTime startedAt;

@@ -7,11 +7,14 @@ import java.util.List;
 
 @Entity
 @Table(name = "user_profile")
-@Data @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter @Setter @ToString
+@NoArgsConstructor @AllArgsConstructor @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class UserProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @Convert(converter = StringListConverter.class)
