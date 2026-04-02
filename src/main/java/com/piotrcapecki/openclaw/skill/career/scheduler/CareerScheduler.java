@@ -10,9 +10,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -38,7 +40,8 @@ public class CareerScheduler {
         }
     }
 
-    public void sendDigest() {
+    @Transactional
+    void sendDigest() {
         List<JobOffer> strong = jobOfferRepository.findBySentAtIsNullAndScore(OfferScore.STRONG);
         List<JobOffer> medium = jobOfferRepository.findBySentAtIsNullAndScore(OfferScore.MEDIUM);
 
@@ -51,8 +54,11 @@ public class CareerScheduler {
         telegramClient.send(message);
 
         LocalDateTime now = LocalDateTime.now();
-        strong.forEach(o -> { o.setSentAt(now); jobOfferRepository.save(o); });
-        medium.forEach(o -> { o.setSentAt(now); jobOfferRepository.save(o); });
+        List<JobOffer> allSent = new ArrayList<>();
+        allSent.addAll(strong);
+        allSent.addAll(medium);
+        allSent.forEach(o -> o.setSentAt(now));
+        jobOfferRepository.saveAll(allSent);
     }
 
     private String buildDigest(List<JobOffer> strong, List<JobOffer> medium) {
@@ -78,6 +84,6 @@ public class CareerScheduler {
         sb.append("• ").append(telegramClient.escapeHtml(o.getTitle()))
           .append(" @ ").append(telegramClient.escapeHtml(o.getCompany()))
           .append(" — ").append(telegramClient.escapeHtml(o.getLocation())).append("\n")
-          .append("  <a href=\"").append(o.getUrl()).append("\">Zobacz ofertę</a>\n");
+          .append("  <a href=\"").append(o.getUrl() != null ? o.getUrl().replace("\"", "%22") : "#").append("\">Zobacz ofertę</a>\n");
     }
 }
