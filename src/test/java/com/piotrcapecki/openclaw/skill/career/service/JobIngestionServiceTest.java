@@ -1,18 +1,27 @@
 package com.piotrcapecki.openclaw.skill.career.service;
 
-import com.piotrcapecki.openclaw.skill.career.domain.*;
-import com.piotrcapecki.openclaw.skill.career.repository.*;
-import com.piotrcapecki.openclaw.skill.career.scraper.*;
-import org.junit.jupiter.api.*;
+import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
+import com.piotrcapecki.openclaw.skill.career.domain.JobSource;
+import com.piotrcapecki.openclaw.skill.career.domain.ScrapeRun;
+import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScrapeRunRepository;
+import com.piotrcapecki.openclaw.skill.career.scraper.JobScraper;
+import com.piotrcapecki.openclaw.skill.career.scraper.RawJobOffer;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.*;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class JobIngestionServiceTest {
@@ -78,5 +87,7 @@ class JobIngestionServiceTest {
         ScrapeRun run = service.ingest();
 
         assertThat(run.getStatus()).isEqualTo("PARTIAL");
+        verify(scraperB).scrape();
+        assertThat(run.getNewOffersCount()).isEqualTo(0);
     }
 }

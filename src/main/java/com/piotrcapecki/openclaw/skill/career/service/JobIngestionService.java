@@ -1,11 +1,16 @@
 package com.piotrcapecki.openclaw.skill.career.service;
 
-import com.piotrcapecki.openclaw.skill.career.domain.*;
-import com.piotrcapecki.openclaw.skill.career.repository.*;
-import com.piotrcapecki.openclaw.skill.career.scraper.*;
+import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
+import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
+import com.piotrcapecki.openclaw.skill.career.domain.ScrapeRun;
+import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScrapeRunRepository;
+import com.piotrcapecki.openclaw.skill.career.scraper.JobScraper;
+import com.piotrcapecki.openclaw.skill.career.scraper.RawJobOffer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -22,11 +27,10 @@ public class JobIngestionService {
     private final JobOfferRepository jobOfferRepository;
     private final ScrapeRunRepository scrapeRunRepository;
 
+    @Transactional
     public ScrapeRun ingest() {
         ScrapeRun run = ScrapeRun.builder()
                 .startedAt(LocalDateTime.now())
-                .newOffersCount(0)
-                .status("SUCCESS")
                 .build();
 
         int newOffers = 0;
@@ -36,6 +40,10 @@ public class JobIngestionService {
             try {
                 List<RawJobOffer> offers = scraper.scrape();
                 for (RawJobOffer raw : offers) {
+                    if (raw.url() == null) {
+                        log.warn("Skipping offer with null URL from source {}: {}", raw.source(), raw.title());
+                        continue;
+                    }
                     String externalId = sha256(raw.url());
                     if (!jobOfferRepository.existsByExternalId(externalId)) {
                         jobOfferRepository.save(JobOffer.builder()
@@ -53,7 +61,7 @@ public class JobIngestionService {
                     }
                 }
             } catch (Exception e) {
-                log.error("Scraper {} failed: {}", scraper.getSource(), e.getMessage());
+                log.error("Scraper {} failed", scraper.getSource(), e);
                 hasError = true;
             }
         }
