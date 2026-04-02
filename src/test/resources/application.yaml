@@ -1,0 +1,21 @@
+app:
+  api-key: changeme
+
+openrouter:
+  api-key: test-key
+  model: test-model
+  base-url: https://openrouter.ai/api/v1
+
+telegram:
+  bot-token: test-token
+  chat-id: "12345"
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
