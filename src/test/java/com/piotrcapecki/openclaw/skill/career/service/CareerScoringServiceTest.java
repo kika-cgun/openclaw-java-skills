@@ -7,10 +7,10 @@ import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
 import com.piotrcapecki.openclaw.skill.career.domain.UserProfile;
 import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.UserProfileRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -19,7 +19,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,8 +30,13 @@ class CareerScoringServiceTest {
     @Mock OpenRouterClient openRouterClient;
     @Mock JobOfferRepository jobOfferRepository;
     @Mock UserProfileRepository userProfileRepository;
-    @Mock ObjectMapper objectMapper;
-    @InjectMocks CareerScoringService service;
+
+    CareerScoringService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new CareerScoringService(openRouterClient, jobOfferRepository, userProfileRepository, new ObjectMapper());
+    }
 
     @Test
     void updatesOfferScoreFromOpenRouterResponse() throws Exception {
@@ -55,7 +59,6 @@ class CareerScoringServiceTest {
 
         when(jobOfferRepository.findByScore(OfferScore.PENDING_SCORE)).thenReturn(List.of(offer));
         when(userProfileRepository.findFirstByOrderByIdAsc()).thenReturn(Optional.of(profile));
-        when(objectMapper.writeValueAsString(anyList())).thenReturn("[]");
         when(openRouterClient.complete(anyString())).thenReturn(claudeResponse);
 
         service.scoreAllPending();
@@ -71,5 +74,6 @@ class CareerScoringServiceTest {
         when(jobOfferRepository.findByScore(OfferScore.PENDING_SCORE)).thenReturn(List.of());
         service.scoreAllPending();
         verify(openRouterClient, never()).complete(anyString());
+        verify(userProfileRepository, never()).findFirstByOrderByIdAsc();
     }
 }

@@ -48,7 +48,10 @@ public class CareerScoringService {
 
             for (ScoreResultDto result : results) {
                 JobOffer offer = offerMap.get(result.offerId());
-                if (offer == null) continue;
+                if (offer == null) {
+                    log.warn("OpenRouter returned unknown offerId: {}", result.offerId());
+                    continue;
+                }
                 try {
                     offer.setScore(OfferScore.valueOf(result.score()));
                     offer.setScoreReason(result.reason());
@@ -103,7 +106,7 @@ public class CareerScoringService {
         int end = content.lastIndexOf(']');
         if (start == -1 || end == -1)
             throw new RuntimeException("No JSON array found in OpenRouter response");
-        return new ObjectMapper().readValue(content.substring(start, end + 1), new TypeReference<>() {});
+        return objectMapper.readValue(content.substring(start, end + 1), new TypeReference<>() {});
     }
 
     private String nvl(String v) { return v != null ? v : ""; }
