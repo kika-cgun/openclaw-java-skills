@@ -99,6 +99,10 @@ public class NoFluffJobsScraper implements JobScraper {
 
     private String extractLocation(JsonNode posting) {
         JsonNode places = posting.path("location").path("places");
-        return places.size() > 0 ? places.get(0).path("city").asText("N/A") : "remote";
+        if (!places.isEmpty()) {
+            String city = places.get(0).path("city").asText("");
+            if (!city.isBlank()) return city;
+        }
+        return posting.path("remote").asBoolean(false) ? "remote" : "N/A";
     }
 }
