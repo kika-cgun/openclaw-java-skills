@@ -16,6 +16,7 @@ public class TelegramClient {
     private final ObjectMapper objectMapper;
     private final String botToken;
     private final String chatId;
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     public TelegramClient(
             ObjectMapper objectMapper,
@@ -31,6 +32,9 @@ public class TelegramClient {
      * Used by all skills on the platform.
      */
     public void send(String htmlMessage) {
+        if (htmlMessage == null) {
+            throw new IllegalArgumentException("htmlMessage must not be null");
+        }
         try {
             String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
             String body = objectMapper.writeValueAsString(Map.of(
@@ -46,8 +50,7 @@ public class TelegramClient {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 
-            HttpResponse<String> response = HttpClient.newHttpClient()
-                    .send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
                 throw new RuntimeException(
@@ -62,11 +65,18 @@ public class TelegramClient {
     }
 
     /**
-     * Helper to build a titled message block.
-     * Skills use this to compose consistent messages.
+     * Builds a titled message where {@code body} is already-formatted HTML.
+     * Callers are responsible for escaping any plain text in {@code body} via {@link #escapeHtml}.
      */
     public String formatMessage(String title, String body) {
         return "<b>" + escapeHtml(title) + "</b>\n\n" + body;
+    }
+
+    /**
+     * Builds a titled message where both title and body are plain text — both will be HTML-escaped.
+     */
+    public String formatPlainMessage(String title, String body) {
+        return "<b>" + escapeHtml(title) + "</b>\n\n" + escapeHtml(body);
     }
 
     public String escapeHtml(String text) {
