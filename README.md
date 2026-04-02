@@ -199,4 +199,4 @@ Each skill lives under `skill/<name>/` and wires into the shared `OpenRouterClie
 
 ## Author
 
-**Piotr Capecki** — [github.com/piotrcapecki](https://github.com/piotrcapecki)
+**Piotr Capecki** — [github.com/kika-cgun](https://github.com/kika-cgun)
