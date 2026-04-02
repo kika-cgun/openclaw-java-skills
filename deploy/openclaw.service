@@ -1,0 +1,31 @@
+[Unit]
+Description=OpenClaw — Multi-skill AI Agent Platform
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=openclaw
+Group=openclaw
+
+WorkingDirectory=/opt/openclaw
+
+# Load env vars from file — never commit this file to git
+EnvironmentFile=/etc/openclaw/env
+
+ExecStart=/usr/bin/java \
+  -Xms256m -Xmx512m \
+  -jar /opt/openclaw/current.jar
+
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

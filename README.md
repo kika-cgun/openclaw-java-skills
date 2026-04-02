@@ -185,6 +185,59 @@ The scheduler fires at **08:00** and executes three stages:
 
 ---
 
+## CI / CD
+
+GitHub Actions handles both integration and deployment automatically.
+
+### CI — runs on every push and pull request
+
+Tests are executed on every branch push and PR. A failing test suite blocks the merge.
+
+```
+.github/workflows/ci.yml
+```
+
+### CD — deploy triggered by a version tag
+
+Push a semantic version tag to kick off a deploy to the VPS:
+
+```bash
+git tag v1.1.0
+git push --tags
+```
+
+The workflow builds a fat JAR, copies it to `/opt/openclaw/releases/<tag>/` on the VPS via SCP, atomically swaps the `current.jar` symlink, and restarts the systemd service. If the service fails to start, the workflow exits non-zero.
+
+A manual trigger (`workflow_dispatch`) is also available from the GitHub Actions tab — useful for hotfixes without a version bump.
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `VPS_HOST` | VPS hostname or IP |
+| `VPS_USER` | SSH user (must have `sudo systemctl restart openclaw` permission) |
+| `VPS_SSH_KEY` | Private SSH key (add the public key to the VPS's `~/.ssh/authorized_keys`) |
+
+### VPS first-time setup
+
+```bash
+# Clone the repo on your local machine, then from the deploy/ directory:
+sudo bash deploy/vps-setup.sh deploy   # pass your SSH deploy username
+
+# Fill in secrets
+sudo nano /etc/openclaw/env
+
+# First deploy (manual)
+git tag v1.0.0 && git push --tags
+```
+
+The `deploy/` directory also contains:
+- `openclaw.service` — systemd unit file
+- `env.example` — template for `/etc/openclaw/env`
+- `vps-setup.sh` — idempotent setup script (creates user, dirs, installs service)
+
+---
+
 ## Future Skills
 
 The platform is built to accommodate additional skills without modifying core infrastructure. Planned additions include:
