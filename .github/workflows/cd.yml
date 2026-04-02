@@ -1,9 +1,6 @@
 name: CD — Deploy to VPS
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
     inputs:
       reason:
