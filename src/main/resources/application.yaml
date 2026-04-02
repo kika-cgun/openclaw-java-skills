@@ -25,3 +25,11 @@ telegram:
 
 app:
   api-key: ${APP_API_KEY}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
