@@ -5,9 +5,11 @@ import com.piotrcapecki.openclaw.core.ai.OpenRouterClient;
 import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
 import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
 import com.piotrcapecki.openclaw.skill.career.domain.ScoringDecisionCache;
+import com.piotrcapecki.openclaw.skill.career.domain.ScoringTelemetry;
 import com.piotrcapecki.openclaw.skill.career.domain.UserProfile;
 import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.ScoringDecisionCacheRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScoringTelemetryRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.UserProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,8 @@ class CareerScoringServiceTest {
     UserProfileRepository userProfileRepository;
     @Mock
     ScoringDecisionCacheRepository scoringDecisionCacheRepository;
+    @Mock
+    ScoringTelemetryRepository scoringTelemetryRepository;
 
     CareerScoringService service;
 
@@ -51,6 +55,7 @@ class CareerScoringServiceTest {
                 jobOfferRepository,
                 userProfileRepository,
                 scoringDecisionCacheRepository,
+                scoringTelemetryRepository,
                 new ObjectMapper());
     }
 
@@ -87,6 +92,7 @@ class CareerScoringServiceTest {
         assertThat(captor.getValue().getScore()).isEqualTo(OfferScore.STRONG);
         assertThat(captor.getValue().getScoreReason()).isEqualTo("Idealne dopasowanie");
         verify(scoringDecisionCacheRepository).save(any(ScoringDecisionCache.class));
+        verify(scoringTelemetryRepository).save(any(ScoringTelemetry.class));
     }
 
     @Test
@@ -95,6 +101,7 @@ class CareerScoringServiceTest {
         service.scoreAllPending();
         verify(openRouterClient, never()).complete(anyString());
         verify(userProfileRepository, never()).findFirstByOrderByIdAsc();
+        verify(scoringTelemetryRepository).save(any(ScoringTelemetry.class));
     }
 
     @Test

@@ -2,6 +2,9 @@ app:
   api-key: changeme
   skills:
     career:
+      scraping:
+        delay-between-sources-ms: 0
+        delay-jitter-ms: 0
       scoring:
         max-offers-per-run: 15
         enable-rule-prefilter: true

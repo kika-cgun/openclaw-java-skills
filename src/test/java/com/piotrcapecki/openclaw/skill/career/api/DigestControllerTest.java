@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
 import com.piotrcapecki.openclaw.skill.career.domain.JobSource;
 import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
+import com.piotrcapecki.openclaw.skill.career.domain.ScoringTelemetry;
 import com.piotrcapecki.openclaw.skill.career.domain.ScrapeRun;
 import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScoringTelemetryRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.ScrapeRunRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +52,9 @@ class DigestControllerTest {
 
     @MockitoBean
     ScrapeRunRepository scrapeRunRepository;
+
+    @MockitoBean
+    ScoringTelemetryRepository scoringTelemetryRepository;
 
     MockMvc mockMvc;
 
@@ -153,6 +158,21 @@ class DigestControllerTest {
                 .build();
 
         when(scrapeRunRepository.findFirstByOrderByStartedAtDesc()).thenReturn(Optional.of(run));
+        when(scoringTelemetryRepository.findFirstByOrderByCreatedAtDesc())
+                .thenReturn(Optional.of(ScoringTelemetry.builder()
+                        .id(UUID.randomUUID())
+                        .createdAt(LocalDateTime.now().minusMinutes(2))
+                        .pendingOffers(3)
+                        .selectedForModel(2)
+                        .autoSkippedCount(1)
+                        .cacheHitCount(1)
+                        .llmScoredCount(1)
+                        .estimatedInputTokens(321)
+                        .estimatedOutputTokens(87)
+                        .modelUsed("stepfun/step-3-5-flash:free")
+                        .scoreSource("RULES+CACHE+LLM")
+                        .status("SUCCESS")
+                        .build()));
         when(jobOfferRepository.countByScore(OfferScore.PENDING_SCORE)).thenReturn(0L);
         when(jobOfferRepository.countBySentAtIsNullAndScore(OfferScore.STRONG)).thenReturn(2L);
         when(jobOfferRepository.countBySentAtIsNullAndScore(OfferScore.MEDIUM)).thenReturn(5L);
@@ -163,6 +183,9 @@ class DigestControllerTest {
                 .andExpect(jsonPath("$.status").value("READY"))
                 .andExpect(jsonPath("$.lastRunState").value("SUCCESS"))
                 .andExpect(jsonPath("$.lastRunNewOffers").value(7))
-                .andExpect(jsonPath("$.unsentStrongCount").value(2));
+                .andExpect(jsonPath("$.unsentStrongCount").value(2))
+                .andExpect(jsonPath("$.lastEstimatedInputTokens").value(321))
+                .andExpect(jsonPath("$.lastModelUsed").value("stepfun/step-3-5-flash:free"))
+                .andExpect(jsonPath("$.lastScoreSource").value("RULES+CACHE+LLM"));
     }
 }

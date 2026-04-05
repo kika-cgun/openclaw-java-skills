@@ -11,5 +11,11 @@ public record CareerDigestStatusDto(
         int lastRunNewOffers,
         long pendingScoreCount,
         long unsentStrongCount,
-        long unsentMediumCount) {
+        long unsentMediumCount,
+        LocalDateTime lastScoringAt,
+        long lastEstimatedInputTokens,
+        long lastEstimatedOutputTokens,
+        String lastModelUsed,
+        String lastScoreSource,
+        String lastScoringStatus) {
 }

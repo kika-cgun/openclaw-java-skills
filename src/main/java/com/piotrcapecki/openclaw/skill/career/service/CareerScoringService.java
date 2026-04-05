@@ -6,10 +6,12 @@ import com.piotrcapecki.openclaw.core.ai.OpenRouterClient;
 import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
 import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
 import com.piotrcapecki.openclaw.skill.career.domain.ScoringDecisionCache;
+import com.piotrcapecki.openclaw.skill.career.domain.ScoringTelemetry;
 import com.piotrcapecki.openclaw.skill.career.domain.UserProfile;
 import com.piotrcapecki.openclaw.skill.career.dto.ScoreResultDto;
 import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.ScoringDecisionCacheRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScoringTelemetryRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +24,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,6 +41,7 @@ public class CareerScoringService {
     private final JobOfferRepository jobOfferRepository;
     private final UserProfileRepository userProfileRepository;
     private final ScoringDecisionCacheRepository scoringDecisionCacheRepository;
+    private final ScoringTelemetryRepository scoringTelemetryRepository;
     private final ObjectMapper objectMapper;
 
     private int maxOffersPerRun = 15;
@@ -69,37 +74,81 @@ public class CareerScoringService {
         List<JobOffer> pending = jobOfferRepository.findByScore(OfferScore.PENDING_SCORE);
         if (pending.isEmpty()) {
             log.info("No pending offers to score");
+            saveTelemetry(0, 0, 0, 0, 0, 0, 0, "N/A", "NONE", "NO_DATA");
             return;
         }
 
-        UserProfile profile = userProfileRepository.findFirstByOrderByIdAsc()
-                .orElseThrow(() -> new IllegalStateException(
-                        "No user profile configured. Set one up via PATCH /api/career/profile"));
-
-        List<JobOffer> selectedForModel = selectOffersForModel(pending, profile);
-        if (selectedForModel.isEmpty()) {
-            log.info("No offers selected for LLM scoring in this run");
-            return;
-        }
-
-        String profileHash = buildProfileHash(profile);
-        List<JobOffer> offersForModel = enableScoringCache
-                ? applyCachedDecisions(selectedForModel, profileHash)
-                : selectedForModel;
-
-        if (offersForModel.isEmpty()) {
-            log.info("All selected offers were scored from cache");
-            return;
-        }
-
-        Map<String, String> cacheKeyByOfferId = offersForModel.stream()
-                .collect(Collectors.toMap(
-                        offer -> offer.getId().toString(),
-                        offer -> buildCacheKey(offer, profileHash)));
+        int pendingOffers = pending.size();
+        int selectedForModel = 0;
+        int autoSkipped = 0;
+        int cacheHits = 0;
+        int llmScored = 0;
+        long estimatedInputTokens = 0;
+        long estimatedOutputTokens = 0;
+        boolean llmUsed = false;
 
         try {
+            UserProfile profile = userProfileRepository.findFirstByOrderByIdAsc()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No user profile configured. Set one up via PATCH /api/career/profile"));
+
+            ScoringPreparation preparation = selectOffersForModel(pending, profile);
+            selectedForModel = preparation.selectedForModel().size();
+            autoSkipped = preparation.autoSkippedCount();
+
+            if (selectedForModel == 0) {
+                log.info("No offers selected for LLM scoring in this run");
+                saveTelemetry(
+                        pendingOffers,
+                        selectedForModel,
+                        autoSkipped,
+                        cacheHits,
+                        llmScored,
+                        estimatedInputTokens,
+                        estimatedOutputTokens,
+                        "N/A",
+                        buildScoreSource(autoSkipped, cacheHits, llmScored),
+                        "SKIPPED");
+                return;
+            }
+
+            String profileHash = buildProfileHash(profile);
+            List<JobOffer> offersForModel = preparation.selectedForModel();
+
+            if (enableScoringCache) {
+                CacheResolution cacheResolution = applyCachedDecisions(offersForModel, profileHash);
+                cacheHits = cacheResolution.cacheHitCount();
+                offersForModel = cacheResolution.cacheMisses();
+            }
+
+            if (offersForModel.isEmpty()) {
+                log.info("All selected offers were scored from cache");
+                saveTelemetry(
+                        pendingOffers,
+                        selectedForModel,
+                        autoSkipped,
+                        cacheHits,
+                        llmScored,
+                        estimatedInputTokens,
+                        estimatedOutputTokens,
+                        "N/A",
+                        buildScoreSource(autoSkipped, cacheHits, llmScored),
+                        "SKIPPED");
+                return;
+            }
+
+            Map<String, String> cacheKeyByOfferId = offersForModel.stream()
+                    .collect(Collectors.toMap(
+                            offer -> offer.getId().toString(),
+                            offer -> buildCacheKey(offer, profileHash)));
+
             String prompt = buildPrompt(profile, offersForModel);
+            estimatedInputTokens = estimateTokens(prompt);
+
             String response = openRouterClient.complete(prompt);
+            llmUsed = true;
+            estimatedOutputTokens = estimateTokens(response);
+
             List<ScoreResultDto> results = parseResults(response);
 
             Map<String, JobOffer> offerMap = offersForModel.stream()
@@ -111,35 +160,62 @@ public class CareerScoringService {
                     log.warn("OpenRouter returned unknown offerId: {}", result.offerId());
                     continue;
                 }
+
                 try {
                     offer.setScore(OfferScore.valueOf(result.score()));
                     offer.setScoreReason(result.reason());
                     jobOfferRepository.save(offer);
+                    llmScored++;
                     upsertScoringCache(cacheKeyByOfferId.get(result.offerId()), offer, profileHash);
                 } catch (IllegalArgumentException e) {
                     log.warn("Unknown score '{}' for offer {}", result.score(), result.offerId());
                 }
             }
+
+            saveTelemetry(
+                    pendingOffers,
+                    selectedForModel,
+                    autoSkipped,
+                    cacheHits,
+                    llmScored,
+                    estimatedInputTokens,
+                    estimatedOutputTokens,
+                    llmUsed ? modelVersion : "N/A",
+                    buildScoreSource(autoSkipped, cacheHits, llmScored),
+                    "SUCCESS");
         } catch (Exception e) {
             log.error("Scoring failed — offers remain PENDING_SCORE", e);
+            saveTelemetry(
+                    pendingOffers,
+                    selectedForModel,
+                    autoSkipped,
+                    cacheHits,
+                    llmScored,
+                    estimatedInputTokens,
+                    estimatedOutputTokens,
+                    llmUsed ? modelVersion : "N/A",
+                    buildScoreSource(autoSkipped, cacheHits, llmScored),
+                    "ERROR");
         }
     }
 
-    private List<JobOffer> selectOffersForModel(List<JobOffer> pending, UserProfile profile) {
+    private ScoringPreparation selectOffersForModel(List<JobOffer> pending, UserProfile profile) {
         List<JobOffer> candidates = pending;
+        int autoSkipped = 0;
 
         if (enableRulePrefilter) {
-            List<JobOffer> autoSkip = pending.stream()
+            List<JobOffer> autoSkippedOffers = pending.stream()
                     .filter(offer -> !matchesProfileRules(offer, profile))
                     .toList();
 
-            if (!autoSkip.isEmpty()) {
-                autoSkip.forEach(offer -> {
+            if (!autoSkippedOffers.isEmpty()) {
+                autoSkippedOffers.forEach(offer -> {
                     offer.setScore(OfferScore.SKIP);
                     offer.setScoreReason(RULE_PREFILTER_SKIP_REASON);
                 });
-                jobOfferRepository.saveAll(autoSkip);
-                log.info("Rule prefilter auto-skipped {} offers", autoSkip.size());
+                jobOfferRepository.saveAll(autoSkippedOffers);
+                autoSkipped = autoSkippedOffers.size();
+                log.info("Rule prefilter auto-skipped {} offers", autoSkipped);
             }
 
             candidates = pending.stream()
@@ -157,10 +233,10 @@ public class CareerScoringService {
             log.info("Scoring limit reached: selected {} of {} matching offers", limited.size(), candidates.size());
         }
 
-        return limited;
+        return new ScoringPreparation(limited, autoSkipped);
     }
 
-    private List<JobOffer> applyCachedDecisions(List<JobOffer> selectedForModel, String profileHash) {
+    private CacheResolution applyCachedDecisions(List<JobOffer> selectedForModel, String profileHash) {
         List<String> keys = selectedForModel.stream()
                 .map(offer -> buildCacheKey(offer, profileHash))
                 .toList();
@@ -190,7 +266,7 @@ public class CareerScoringService {
             log.info("Applied scoring cache for {} offers", cachedOffers.size());
         }
 
-        return misses;
+        return new CacheResolution(misses, cachedOffers.size());
     }
 
     private void upsertScoringCache(String cacheKey, JobOffer offer, String profileHash) {
@@ -238,6 +314,7 @@ public class CareerScoringService {
         if (values == null || values.isEmpty()) {
             return "";
         }
+
         return values.stream()
                 .map(this::normalize)
                 .filter(v -> !v.isBlank())
@@ -295,7 +372,7 @@ public class CareerScoringService {
                     - Preferences: %s
 
                     For each offer below, return ONLY a JSON array. Each element must have:
-                      "offerId" (string), "score" (STRONG | MEDIUM | SKIP), "reason" (Polish, max 100 chars)
+                      \"offerId\" (string), \"score\" (STRONG | MEDIUM | SKIP), \"reason\" (Polish, max 100 chars)
 
                     No markdown, no explanation — only the JSON array.
 
@@ -315,10 +392,65 @@ public class CareerScoringService {
     private List<ScoreResultDto> parseResults(String content) throws Exception {
         int start = content.indexOf('[');
         int end = content.lastIndexOf(']');
-        if (start == -1 || end == -1)
+        if (start == -1 || end == -1) {
             throw new RuntimeException("No JSON array found in OpenRouter response");
+        }
         return objectMapper.readValue(content.substring(start, end + 1), new TypeReference<>() {
         });
+    }
+
+    private long estimateTokens(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        return (text.length() / 4L) + 20L;
+    }
+
+    private String buildScoreSource(int autoSkipped, int cacheHits, int llmScored) {
+        Set<String> sources = new LinkedHashSet<>();
+        if (autoSkipped > 0) {
+            sources.add("RULES");
+        }
+        if (cacheHits > 0) {
+            sources.add("CACHE");
+        }
+        if (llmScored > 0) {
+            sources.add("LLM");
+        }
+        if (sources.isEmpty()) {
+            sources.add("NONE");
+        }
+        return String.join("+", sources);
+    }
+
+    private void saveTelemetry(
+            int pendingOffers,
+            int selectedForModel,
+            int autoSkipped,
+            int cacheHits,
+            int llmScored,
+            long estimatedInputTokens,
+            long estimatedOutputTokens,
+            String modelUsed,
+            String scoreSource,
+            String status) {
+        try {
+            scoringTelemetryRepository.save(ScoringTelemetry.builder()
+                    .createdAt(LocalDateTime.now())
+                    .pendingOffers(pendingOffers)
+                    .selectedForModel(selectedForModel)
+                    .autoSkippedCount(autoSkipped)
+                    .cacheHitCount(cacheHits)
+                    .llmScoredCount(llmScored)
+                    .estimatedInputTokens(estimatedInputTokens)
+                    .estimatedOutputTokens(estimatedOutputTokens)
+                    .modelUsed(nvl(modelUsed).isBlank() ? "N/A" : modelUsed)
+                    .scoreSource(nvl(scoreSource).isBlank() ? "NONE" : scoreSource)
+                    .status(nvl(status).isBlank() ? "UNKNOWN" : status)
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to persist scoring telemetry", e);
+        }
     }
 
     private String normalize(String value) {
@@ -327,5 +459,11 @@ public class CareerScoringService {
 
     private String nvl(String v) {
         return v != null ? v : "";
+    }
+
+    private record ScoringPreparation(List<JobOffer> selectedForModel, int autoSkippedCount) {
+    }
+
+    private record CacheResolution(List<JobOffer> cacheMisses, int cacheHitCount) {
     }
 }

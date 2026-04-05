@@ -27,6 +27,9 @@ app:
   api-key: ${APP_API_KEY}
   skills:
     career:
+      scraping:
+        delay-between-sources-ms: ${CAREER_SCRAPING_DELAY_BETWEEN_SOURCES_MS:900}
+        delay-jitter-ms: ${CAREER_SCRAPING_DELAY_JITTER_MS:250}
       scoring:
         max-offers-per-run: ${CAREER_SCORING_MAX_OFFERS_PER_RUN:15}
         enable-rule-prefilter: ${CAREER_SCORING_ENABLE_RULE_PREFILTER:true}

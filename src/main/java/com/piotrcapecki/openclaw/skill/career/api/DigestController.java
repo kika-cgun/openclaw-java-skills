@@ -2,6 +2,7 @@ package com.piotrcapecki.openclaw.skill.career.api;
 
 import com.piotrcapecki.openclaw.skill.career.domain.JobOffer;
 import com.piotrcapecki.openclaw.skill.career.domain.OfferScore;
+import com.piotrcapecki.openclaw.skill.career.domain.ScoringTelemetry;
 import com.piotrcapecki.openclaw.skill.career.domain.ScrapeRun;
 import com.piotrcapecki.openclaw.skill.career.dto.CareerDigestAckRequestDto;
 import com.piotrcapecki.openclaw.skill.career.dto.CareerDigestAckResponseDto;
@@ -9,6 +10,7 @@ import com.piotrcapecki.openclaw.skill.career.dto.CareerDigestDto;
 import com.piotrcapecki.openclaw.skill.career.dto.CareerDigestItemDto;
 import com.piotrcapecki.openclaw.skill.career.dto.CareerDigestStatusDto;
 import com.piotrcapecki.openclaw.skill.career.repository.JobOfferRepository;
+import com.piotrcapecki.openclaw.skill.career.repository.ScoringTelemetryRepository;
 import com.piotrcapecki.openclaw.skill.career.repository.ScrapeRunRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -43,6 +45,7 @@ public class DigestController {
 
     private final JobOfferRepository jobOfferRepository;
     private final ScrapeRunRepository scrapeRunRepository;
+    private final ScoringTelemetryRepository scoringTelemetryRepository;
 
     @Operation(summary = "Get compact digest for OpenClaw")
     @GetMapping("/compact")
@@ -97,6 +100,8 @@ public class DigestController {
     @GetMapping("/status")
     public ResponseEntity<CareerDigestStatusDto> getDigestStatus() {
         ScrapeRun lastRun = scrapeRunRepository.findFirstByOrderByStartedAtDesc().orElse(null);
+        ScoringTelemetry lastScoringTelemetry = scoringTelemetryRepository.findFirstByOrderByCreatedAtDesc()
+                .orElse(null);
 
         long pendingScoreCount = jobOfferRepository.countByScore(OfferScore.PENDING_SCORE);
         long unsentStrongCount = jobOfferRepository.countBySentAtIsNullAndScore(OfferScore.STRONG);
@@ -114,7 +119,13 @@ public class DigestController {
                 lastRun != null && lastRun.getNewOffersCount() != null ? lastRun.getNewOffersCount() : 0,
                 pendingScoreCount,
                 unsentStrongCount,
-                unsentMediumCount);
+                unsentMediumCount,
+                lastScoringTelemetry != null ? lastScoringTelemetry.getCreatedAt() : null,
+                lastScoringTelemetry != null ? lastScoringTelemetry.getEstimatedInputTokens() : 0,
+                lastScoringTelemetry != null ? lastScoringTelemetry.getEstimatedOutputTokens() : 0,
+                lastScoringTelemetry != null ? safe(lastScoringTelemetry.getModelUsed()) : "N/A",
+                lastScoringTelemetry != null ? safe(lastScoringTelemetry.getScoreSource()) : "NONE",
+                lastScoringTelemetry != null ? safe(lastScoringTelemetry.getStatus()) : "NO_DATA");
 
         return ResponseEntity.ok(response);
     }
