@@ -33,7 +33,17 @@ public class JustJoinItScraper implements JobScraper {
     @Override
     public List<RawJobOffer> scrape() {
         Request request = new Request.Builder()
-                .url(API_URL).header("Accept", "application/json").build();
+                .url(API_URL)
+                // Browser-like headers required — server returns 404/403 without them
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "pl-PL,pl;q=0.9,en;q=0.8")
+                .header("Referer", "https://justjoin.it/offers")
+                .header("Origin", "https://justjoin.it")
+                .header("sec-fetch-dest", "empty")
+                .header("sec-fetch-mode", "cors")
+                .header("sec-fetch-site", "same-origin")
+                .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
             ResponseBody body = response.body();

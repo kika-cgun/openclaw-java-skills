@@ -16,7 +16,7 @@ spring:
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY}
-  model: ${OPENROUTER_MODEL:anthropic/claude-sonnet-4-5}
+  model: ${OPENROUTER_MODEL:stepfun/step-3-5-flash:free}
   base-url: https://openrouter.ai/api/v1
 
 telegram:

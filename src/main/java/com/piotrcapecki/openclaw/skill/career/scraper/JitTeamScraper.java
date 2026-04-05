@@ -15,12 +15,17 @@ import java.util.List;
 public class JitTeamScraper implements JobScraper {
 
     private static final String BASE_URL  = "https://jit.team";
-    private static final String JOBS_URL  = BASE_URL + "/praca";
-    // ⚠️ Verify selectors against the live page before production
-    private static final String OFFER_SEL    = "div.job-offer";
-    private static final String TITLE_SEL    = "h2.job-title";
-    private static final String LOCATION_SEL = "span.location";
-    private static final String LINK_SEL     = "a.job-link";
+    private static final String JOBS_URL  = BASE_URL + "/join";
+
+    // ⚠️ jit.team/join is a React SPA — Jsoup fetches only the static shell,
+    //    so these selectors target the server-side-rendered fallback markup.
+    //    Currently (2026) the page reports "We have no such active offers"
+    //    when no positions are open → scraper will return an empty list without crashing.
+    //    Once active offers appear, verify selectors against the rendered DOM.
+    private static final String OFFER_SEL    = "article.JobOffer, div[class*='JobOffer'], li[class*='job']";
+    private static final String TITLE_SEL    = "h2, h3, [class*='title']";
+    private static final String LOCATION_SEL = "[class*='location'], [class*='city']";
+    private static final String LINK_SEL     = "a[href]";
 
     @Override
     public JobSource getSource() { return JobSource.JIT; }

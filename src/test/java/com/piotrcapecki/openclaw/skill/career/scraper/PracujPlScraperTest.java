@@ -22,20 +22,27 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AmazonJobsScraperTest {
+class PracujPlScraperTest {
 
     @Mock OkHttpClient httpClient;
 
     @Test
-    void parsesJobsFromJsonResponse() throws Exception {
+    void parsesOffersFromGroupedOffersStructure() throws Exception {
         String json = """
             {
-              "jobs": [
+              "groupedOffers": [
                 {
-                  "title": "Software Dev Engineer I",
-                  "location": "Gdańsk, Poland",
-                  "job_path": "/pl/jobs/123",
-                  "description_short": "Build scalable systems at Amazon."
+                  "jobTitle": "Junior Java Developer",
+                  "companyName": "Capgemini",
+                  "offers": [{
+                    "displayWorkplace": "Gdańsk",
+                    "offerAbsoluteUri": "https://it.pracuj.pl/praca/junior-java-developer,capgemini,1234"
+                  }]
+                },
+                {
+                  "jobTitle": "",
+                  "companyName": "NoTitle Corp",
+                  "offers": [{ "offerAbsoluteUri": "" }]
                 }
               ]
             }
@@ -43,36 +50,37 @@ class AmazonJobsScraperTest {
 
         Call call = mock(Call.class);
         Response response = new Response.Builder()
-                .request(new Request.Builder().url("https://www.amazon.jobs/en/search.json").build())
+                .request(new Request.Builder().url("https://it.pracuj.pl/api/v1/offers").build())
                 .protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(ResponseBody.create(json, MediaType.parse("application/json")))
                 .build();
         when(httpClient.newCall(any())).thenReturn(call);
         when(call.execute()).thenReturn(response);
 
-        AmazonJobsScraper scraper = new AmazonJobsScraper(httpClient, new ObjectMapper());
+        PracujPlScraper scraper = new PracujPlScraper(httpClient, new ObjectMapper());
         List<RawJobOffer> offers = scraper.scrape();
 
+        // blank title/url entry should be skipped
         assertThat(offers).hasSize(1);
-        assertThat(offers.get(0).title()).isEqualTo("Software Dev Engineer I");
-        assertThat(offers.get(0).company()).isEqualTo("Amazon");
-        assertThat(offers.get(0).location()).isEqualTo("Gdańsk, Poland");
-        assertThat(offers.get(0).url()).isEqualTo("https://www.amazon.jobs/pl/jobs/123");
-        assertThat(offers.get(0).source()).isEqualTo(JobSource.AMAZON);
+        assertThat(offers.get(0).title()).isEqualTo("Junior Java Developer");
+        assertThat(offers.get(0).company()).isEqualTo("Capgemini");
+        assertThat(offers.get(0).location()).isEqualTo("Gdańsk");
+        assertThat(offers.get(0).url()).isEqualTo("https://it.pracuj.pl/praca/junior-java-developer,capgemini,1234");
+        assertThat(offers.get(0).source()).isEqualTo(JobSource.PRACUJ);
     }
 
     @Test
     void returnsEmptyListOnNonSuccessResponse() throws Exception {
         Call call = mock(Call.class);
         Response response = new Response.Builder()
-                .request(new Request.Builder().url("https://www.amazon.jobs/en/search.json").build())
-                .protocol(Protocol.HTTP_1_1).code(503).message("Service Unavailable")
+                .request(new Request.Builder().url("https://it.pracuj.pl/api/v1/offers").build())
+                .protocol(Protocol.HTTP_1_1).code(403).message("Forbidden")
                 .body(ResponseBody.create("", MediaType.parse("text/html")))
                 .build();
         when(httpClient.newCall(any())).thenReturn(call);
         when(call.execute()).thenReturn(response);
 
-        AmazonJobsScraper scraper = new AmazonJobsScraper(httpClient, new ObjectMapper());
+        PracujPlScraper scraper = new PracujPlScraper(httpClient, new ObjectMapper());
         List<RawJobOffer> offers = scraper.scrape();
 
         assertThat(offers).isEmpty();

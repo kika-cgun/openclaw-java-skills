@@ -1,59 +1,69 @@
 package com.piotrcapecki.openclaw.skill.career.scraper;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.piotrcapecki.openclaw.skill.career.domain.JobSource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class AmazonJobsScraper implements JobScraper {
 
-    private static final String BASE_URL   = "https://www.amazon.jobs";
-    private static final String SEARCH_URL = BASE_URL +
-            "/pl/search?country=POL&base_query=java&category[]=software-development&experience_ids[]=entry-level";
-    // ⚠️ Verify selectors against the live page before production
-    private static final String OFFER_SEL    = "div.job-tile";
-    private static final String TITLE_SEL    = "h3.job-title a";
-    private static final String LOCATION_SEL = "div.location-and-id span";
+    // Official Amazon Jobs JSON API — used by their own search frontend
+    private static final String BASE_URL = "https://www.amazon.jobs";
+    private static final String API_URL  = BASE_URL +
+            "/en/search.json?base_query=java&loc_query=Poland" +
+            "&category%5B%5D=software-development" +
+            "&experience_ids%5B%5D=entry-level" +
+            "&result_limit=25";
+
+    private final OkHttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
     @Override
     public JobSource getSource() { return JobSource.AMAZON; }
 
     @Override
     public List<RawJobOffer> scrape() {
-        try {
-            Document doc = fetchDocument();
+        Request request = new Request.Builder()
+                .url(API_URL)
+                .header("Accept", "application/json")
+                .header("User-Agent", "Mozilla/5.0")
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            ResponseBody body = response.body();
+            if (!response.isSuccessful() || body == null) {
+                log.warn("Amazon Jobs API returned {}", response.code());
+                return List.of();
+            }
+
+            JsonNode root = objectMapper.readTree(body.string());
             List<RawJobOffer> result = new ArrayList<>();
-            for (Element el : doc.select(OFFER_SEL)) {
-                Element titleLink = el.selectFirst(TITLE_SEL);
-                if (titleLink == null) continue;
-                String title = titleLink.text();
-                String href = titleLink.attr("href");
-                String url = href.startsWith("http") ? href : BASE_URL + href;
-                String location = el.select(LOCATION_SEL).text();
-                if (location.isBlank()) location = "Poland";
-                result.add(new RawJobOffer(
-                        title,
-                        "Amazon",
-                        location,
-                        url,
-                        title + " at Amazon — " + location,
-                        JobSource.AMAZON));
+
+            for (JsonNode job : root.path("jobs")) {
+                String title    = job.path("title").asText();
+                String location = job.path("location").asText("Poland");
+                String jobPath  = job.path("job_path").asText();
+                String url      = jobPath.startsWith("http") ? jobPath : BASE_URL + jobPath;
+                String desc     = job.path("description_short").asText(title + " at Amazon");
+
+                result.add(new RawJobOffer(title, "Amazon", location, url, desc, JobSource.AMAZON));
             }
             return result;
         } catch (Exception e) {
             log.error("Amazon Jobs scraper error", e);
             throw new RuntimeException("Amazon Jobs scrape failed", e);
         }
-    }
-
-    protected Document fetchDocument() throws Exception {
-        return Jsoup.connect(SEARCH_URL).userAgent("Mozilla/5.0").timeout(15_000).get();
     }
 }

@@ -1,5 +1,5 @@
 package com.piotrcapecki.openclaw.skill.career.domain;
 
 public enum JobSource {
-    JUSTJOINIT, NOFLUFFJOBS, JIT, AMAZON, DELOITTE
+    JUSTJOINIT, NOFLUFFJOBS, JIT, AMAZON, PRACUJ, BULLDOGJOB
 }
