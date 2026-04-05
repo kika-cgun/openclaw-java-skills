@@ -25,7 +25,7 @@ public class ScrapeController {
     private final CareerScheduler careerScheduler;
     private final ScrapeRunRepository scrapeRunRepository;
 
-    @Operation(summary = "Trigger daily pipeline", description = "Runs scraping, AI scoring, and sends Telegram digest. Synchronous — waits for completion.")
+    @Operation(summary = "Trigger daily pipeline", description = "Runs scraping and AI scoring, then optionally sends Telegram digest (if enabled). Synchronous — waits for completion.")
     @PostMapping("/run")
     public ResponseEntity<Void> triggerScrape() {
         careerScheduler.runDailyPipeline();

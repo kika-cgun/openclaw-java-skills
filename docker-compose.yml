@@ -32,14 +32,18 @@ services:
       DB_USERNAME: ${DB_USERNAME:-openclaw}
       DB_PASSWORD: ${DB_PASSWORD:-openclaw}
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/openclaw
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_LOCATIONS: classpath:db/migration
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
 
       # AI model (OpenRouter)
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-stepfun/step-3-5-flash:free}
 
       # Telegram notifications
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      APP_TELEGRAM_ENABLED: ${APP_TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
 
       # REST API protection
       APP_API_KEY: ${APP_API_KEY}

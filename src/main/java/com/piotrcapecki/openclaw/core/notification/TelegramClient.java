@@ -2,6 +2,7 @@ package com.piotrcapecki.openclaw.core.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,7 @@ import java.net.http.*;
 import java.util.Map;
 
 @Component
+@ConditionalOnProperty(prefix = "app.telegram", name = "enabled", havingValue = "true")
 @Slf4j
 public class TelegramClient {
 
@@ -25,6 +27,11 @@ public class TelegramClient {
         this.objectMapper = objectMapper;
         this.botToken = botToken;
         this.chatId = chatId;
+
+        if (botToken == null || botToken.isBlank() || chatId == null || chatId.isBlank()) {
+            throw new IllegalStateException(
+                    "Telegram is enabled, but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing");
+        }
     }
 
     /**
@@ -41,8 +48,7 @@ public class TelegramClient {
                     "chat_id", chatId,
                     "text", htmlMessage,
                     "parse_mode", "HTML",
-                    "disable_web_page_preview", true
-            ));
+                    "disable_web_page_preview", true));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -66,21 +72,24 @@ public class TelegramClient {
 
     /**
      * Builds a titled message where {@code body} is already-formatted HTML.
-     * Callers are responsible for escaping any plain text in {@code body} via {@link #escapeHtml}.
+     * Callers are responsible for escaping any plain text in {@code body} via
+     * {@link #escapeHtml}.
      */
     public String formatMessage(String title, String body) {
         return "<b>" + escapeHtml(title) + "</b>\n\n" + body;
     }
 
     /**
-     * Builds a titled message where both title and body are plain text — both will be HTML-escaped.
+     * Builds a titled message where both title and body are plain text — both will
+     * be HTML-escaped.
      */
     public String formatPlainMessage(String title, String body) {
         return "<b>" + escapeHtml(title) + "</b>\n\n" + escapeHtml(body);
     }
 
     public String escapeHtml(String text) {
-        if (text == null) return "";
+        if (text == null)
+            return "";
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

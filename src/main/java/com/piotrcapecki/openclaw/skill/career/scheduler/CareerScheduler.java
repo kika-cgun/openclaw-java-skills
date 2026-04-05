@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -24,7 +25,7 @@ public class CareerScheduler {
 
     private final JobIngestionService jobIngestionService;
     private final CareerScoringService careerScoringService;
-    private final TelegramClient telegramClient;
+    private final Optional<TelegramClient> telegramClient;
     private final JobOfferRepository jobOfferRepository;
 
     @Scheduled(cron = "0 0 8 * * *")
@@ -42,6 +43,11 @@ public class CareerScheduler {
 
     @Transactional
     void sendDigest() {
+        if (telegramClient.isEmpty()) {
+            log.info("[CareerAgent] Telegram disabled; skipping digest send");
+            return;
+        }
+
         List<JobOffer> strong = jobOfferRepository.findBySentAtIsNullAndScore(OfferScore.STRONG);
         List<JobOffer> medium = jobOfferRepository.findBySentAtIsNullAndScore(OfferScore.MEDIUM);
 
@@ -51,7 +57,7 @@ public class CareerScheduler {
         }
 
         String message = buildDigest(strong, medium);
-        telegramClient.send(message);
+        telegramClient.orElseThrow().send(message);
 
         LocalDateTime now = LocalDateTime.now();
         List<JobOffer> allSent = new ArrayList<>();
@@ -64,26 +70,35 @@ public class CareerScheduler {
     private String buildDigest(List<JobOffer> strong, List<JobOffer> medium) {
         StringBuilder sb = new StringBuilder();
         sb.append("🔍 <b>OpenClaw — Daily Job Report [")
-          .append(LocalDate.now()).append("]</b>\n\n");
+                .append(LocalDate.now()).append("]</b>\n\n");
 
         if (!strong.isEmpty()) {
             sb.append("💚 <b>Mocne dopasowania (").append(strong.size()).append(")</b>\n");
-            for (JobOffer o : strong) appendOffer(sb, o);
+            for (JobOffer o : strong)
+                appendOffer(sb, o);
             sb.append("\n");
         }
 
         if (!medium.isEmpty()) {
             sb.append("🟡 <b>Średnie dopasowania (").append(medium.size()).append(")</b>\n");
-            for (JobOffer o : medium) appendOffer(sb, o);
+            for (JobOffer o : medium)
+                appendOffer(sb, o);
         }
 
         return sb.toString();
     }
 
     private void appendOffer(StringBuilder sb, JobOffer o) {
-        sb.append("• ").append(telegramClient.escapeHtml(o.getTitle()))
-          .append(" @ ").append(telegramClient.escapeHtml(o.getCompany()))
-          .append(" — ").append(telegramClient.escapeHtml(o.getLocation())).append("\n")
-          .append("  <a href=\"").append(o.getUrl() != null ? o.getUrl().replace("\"", "%22") : "#").append("\">Zobacz ofertę</a>\n");
+        sb.append("• ").append(escapeHtml(o.getTitle()))
+                .append(" @ ").append(escapeHtml(o.getCompany()))
+                .append(" — ").append(escapeHtml(o.getLocation())).append("\n")
+                .append("  <a href=\"").append(o.getUrl() != null ? o.getUrl().replace("\"", "%22") : "#")
+                .append("\">Zobacz ofertę</a>\n");
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null)
+            return "";
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
