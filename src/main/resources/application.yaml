@@ -25,6 +25,12 @@ telegram:
 
 app:
   api-key: ${APP_API_KEY}
+  skills:
+    career:
+      scoring:
+        max-offers-per-run: ${CAREER_SCORING_MAX_OFFERS_PER_RUN:15}
+        enable-rule-prefilter: ${CAREER_SCORING_ENABLE_RULE_PREFILTER:true}
+        enable-cache: ${CAREER_SCORING_ENABLE_CACHE:true}
 
 springdoc:
   swagger-ui:

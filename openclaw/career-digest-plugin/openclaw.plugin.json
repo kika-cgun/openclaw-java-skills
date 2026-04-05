@@ -1,0 +1,15 @@
+{
+  "id": "career-digest",
+  "name": "Career Digest",
+  "description": "Fetches compact career digest payloads from Java backend and acknowledges delivered offers.",
+  "version": "0.1.0",
+  "skills": ["skills"],
+  "contracts": {
+    "tools": ["fetch_career_digest", "ack_career_digest", "run_career_digest_cycle"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

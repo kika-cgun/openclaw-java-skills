@@ -1,5 +1,11 @@
 app:
   api-key: changeme
+  skills:
+    career:
+      scoring:
+        max-offers-per-run: 15
+        enable-rule-prefilter: true
+        enable-cache: true
 
 openrouter:
   api-key: test-key

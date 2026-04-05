@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface ScrapeRunRepository extends JpaRepository<ScrapeRun, UUID> {
     List<ScrapeRun> findAllByOrderByStartedAtDesc();
+
+    java.util.Optional<ScrapeRun> findFirstByOrderByStartedAtDesc();
 }

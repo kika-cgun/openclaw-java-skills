@@ -1,0 +1,13 @@
+{
+  "name": "@piotrcapecki/openclaw-career-digest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw plugin exposing compact career digest tools for Java backend integration.",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.0"
+  }
+}
