@@ -28,6 +28,6 @@ public class OpenApiConfig {
                         .description("Multi-skill AI agent platform — CareerAgent skill REST API")
                         .contact(new Contact()
                                 .name("Piotr Capecki")
-                                .url("https://github.com/piotrcapecki")));
+                                .url("https://piotr-capecki.pl")));
     }
 }

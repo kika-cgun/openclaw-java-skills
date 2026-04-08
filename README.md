@@ -1,6 +1,6 @@
 # OpenClaw
 
-A multi-skill AI agent platform built by **Piotr Capecki**. The first skill — **CareerAgent** — scrapes job and internship listings daily, scores them with Claude AI, and delivers a ranked digest via Telegram.
+A multi-skill AI agent platform built by **Piotr Capecki**. The first skill — **CareerAgent** — scrapes job and internship listings daily, scores them with an LLM via OpenRouter, and delivers a ranked digest via Telegram or OpenClaw plugin workflows.
 
 ---
 
@@ -8,7 +8,7 @@ A multi-skill AI agent platform built by **Piotr Capecki**. The first skill — 
 
 OpenClaw is designed as a modular platform where each "skill" is a self-contained module that plugs into shared infrastructure (AI client, notifications, security). The platform runs on a VPS and operates autonomously without manual intervention.
 
-**CareerAgent** currently aggregates listings from five sources, deduplicates them via SHA-256 URL hashing, scores each offer against a configurable user profile using Claude (via OpenRouter), and sends a concise Telegram digest every morning.
+**CareerAgent** currently aggregates listings from six sources, deduplicates them via SHA-256 URL hashing, scores each offer against a configurable user profile using OpenRouter models, and sends a concise Telegram digest every morning.
 
 ---
 
@@ -27,9 +27,10 @@ openclaw/
     ├── scraper/                 # Job scrapers
     │   ├── JustJoinItScraper        (REST API)
     │   ├── NoFluffJobsScraper       (REST API POST)
+    │   ├── BulldogjobScraper        (JSON feed)
+    │   ├── PracujPlScraper          (REST API)
     │   ├── JitTeamScraper           (Jsoup)
     │   ├── AmazonJobsScraper        (Jsoup)
-    │   └── DeloitteJobsScraper      (Jsoup)
     ├── service/
     │   ├── JobIngestionService      # Deduplication via SHA-256 URL hash
     │   └── CareerScoringService     # Batch AI scoring via OpenRouter
@@ -55,7 +56,7 @@ Future skills (e.g. VPS monitoring, backup orchestration) drop into `skill/<name
 | Database | PostgreSQL + Flyway migrations |
 | HTTP client | OkHttp 4.12.0 |
 | HTML scraping | Jsoup 1.17.2 |
-| AI | OpenRouter → Claude (`anthropic/claude-sonnet-4-5`) |
+| AI | OpenRouter (`stepfun/step-3-5-flash:free` default; Claude optional) |
 | Notifications | Telegram Bot API |
 | Build | Gradle Kotlin DSL |
 | Testing | JUnit 5, Mockito, AssertJ, H2 (in-memory) |
@@ -88,8 +89,13 @@ All endpoints require an `X-API-Key` header.
 | `GET` | `/api/career/offers/{id}` | Get a single offer by UUID |
 | `POST` | `/api/career/scrape/run` | Trigger the full pipeline manually |
 | `GET` | `/api/career/scrape/runs` | List scrape run history |
+| `GET` | `/api/career/digest/status` | Digest readiness and telemetry summary |
+| `GET` | `/api/career/digest/compact` | Compact digest payload for OpenClaw plugin |
+| `POST` | `/api/career/digest/ack` | Mark digest offers as delivered |
 
-Interactive documentation is available at `http://localhost:8080/swagger-ui.html`.
+Interactive documentation is available at:
+- local JVM run: `http://localhost:8080/swagger-ui.html`
+- Docker Compose host binding: `http://127.0.0.1:18080/swagger-ui.html`
 
 ### Example requests
 
@@ -98,7 +104,7 @@ Interactive documentation is available at `http://localhost:8080/swagger-ui.html
 curl -X PATCH http://localhost:8080/api/career/profile \
   -H "X-API-Key: $APP_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"stack": "Java, Spring Boot", "level": "junior", "locations": "Warsaw, remote"}'
+  -d '{"stack": ["Java", "Spring Boot"], "level": ["junior"], "locations": ["Warsaw", "remote"], "preferences": "Product teams, backend focus"}'
 
 # Trigger a scrape run
 curl -X POST http://localhost:8080/api/career/scrape/run \
@@ -124,7 +130,8 @@ curl http://localhost:8080/api/career/offers \
 DB_USERNAME          PostgreSQL username        (default: openclaw)
 DB_PASSWORD          PostgreSQL password
 OPENROUTER_API_KEY   OpenRouter API key
-OPENROUTER_MODEL     Model override             (default: anthropic/claude-sonnet-4-5)
+OPENROUTER_MODEL     Model override             (default: stepfun/step-3-5-flash:free)
+APP_TELEGRAM_ENABLED Enable Telegram digest     (default: false)
 TELEGRAM_BOT_TOKEN   Telegram Bot token from @BotFather
 TELEGRAM_CHAT_ID     Telegram chat or channel ID
 APP_API_KEY          Secret for X-API-Key header (required, no default)
@@ -154,12 +161,27 @@ export APP_API_KEY=...
 curl -X PATCH http://localhost:8080/api/career/profile \
   -H "X-API-Key: $APP_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"stack": "Java, Spring Boot", "level": "junior", "locations": "Warsaw, remote"}'
+  -d '{"stack": ["Java", "Spring Boot"], "level": ["junior"], "locations": ["Warsaw", "remote"], "preferences": "Product teams, backend focus"}'
 
 # 5. Trigger the first pipeline run
 curl -X POST http://localhost:8080/api/career/scrape/run \
   -H "X-API-Key: $APP_API_KEY"
 ```
+
+### Running with Docker Compose (VPS-friendly)
+
+```bash
+# 1. Copy and fill env
+cp deploy/env.example .env
+
+# 2. Start services (db + app)
+docker compose up -d --build
+
+# 3. API is exposed only on loopback host port 18080
+curl -H "X-API-Key: $APP_API_KEY" http://127.0.0.1:18080/api/career/digest/status
+```
+
+Docker maps host `127.0.0.1:18080` -> container `app:8080`.
 
 ---
 
@@ -179,9 +201,64 @@ Every service and controller was developed test-first. Scrapers expose an overri
 
 The scheduler fires at **08:00** and executes three stages:
 
-1. **Scrape** — all five sources are queried in sequence; each raw listing is hashed (SHA-256 of the canonical URL) and inserted only if the hash is not already present in `job_offers`.
+1. **Scrape** — all six sources are queried in sequence; each raw listing is hashed (SHA-256 of the canonical URL) and inserted only if the hash is not already present in `job_offers`.
 2. **Score** — every offer in `PENDING_SCORE` state is sent to Claude (via OpenRouter) in batches. The model evaluates the listing against the stored user profile and returns `STRONG`, `MEDIUM`, or `SKIP`.
 3. **Notify** — a Telegram digest is composed from scored offers: 💚 STRONG offers appear first, followed by 🟡 MEDIUM offers. `SKIP` offers are never sent.
+
+---
+
+## OpenClaw AI Plugin Integration
+
+This repository includes a native OpenClaw plugin at `openclaw/career-digest-plugin`.
+
+### Install plugin in OpenClaw
+
+```bash
+openclaw plugins install -l ./openclaw/career-digest-plugin
+openclaw plugins enable career-digest
+openclaw gateway restart
+```
+
+### Required plugin env in OpenClaw config
+
+Set skill env values in `~/.openclaw/openclaw.json` (or equivalent profile config):
+
+```json
+{
+  "skills": {
+    "entries": {
+      "career-digest": {
+        "enabled": true,
+        "env": {
+          "CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+          "CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+        }
+      },
+      "career-digest-run": {
+        "enabled": true,
+        "env": {
+          "CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+          "CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+        }
+      },
+      "career-digest-ack": {
+        "enabled": true,
+        "env": {
+          "CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+          "CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+        }
+      }
+    }
+  }
+}
+```
+
+### Example slash commands
+
+```text
+/career-digest limitStrong=5 limitMedium=5 onlyUnsent=true
+/career-digest-run limitStrong=5 limitMedium=5 onlyUnsent=true autoAck=true
+```
 
 ---
 

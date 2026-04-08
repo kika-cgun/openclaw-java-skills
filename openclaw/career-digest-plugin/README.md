@@ -16,11 +16,50 @@ This plugin connects OpenClaw with the Java Career backend using compact digest 
 
 ## Required environment variables
 
-- CAREER_API_BASE_URL (example: <http://localhost:8080>)
+- CAREER_API_BASE_URL (example: <http://127.0.0.1:18080> for Docker host mapping)
 - CAREER_API_KEY
 - Optional: CAREER_API_TIMEOUT_MS (default: 10000)
 - Optional: CAREER_API_RETRY_ATTEMPTS (default: 2)
 - Optional: CAREER_API_RETRY_BASE_DELAY_MS (default: 350)
+
+## Recommended OpenClaw config
+
+Set plugin skill env in `~/.openclaw/openclaw.json`:
+
+```json
+{
+	"plugins": {
+		"entries": {
+			"career-digest": { "enabled": true }
+		}
+	},
+	"skills": {
+		"entries": {
+			"career-digest": {
+				"enabled": true,
+				"env": {
+					"CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+					"CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+				}
+			},
+			"career-digest-run": {
+				"enabled": true,
+				"env": {
+					"CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+					"CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+				}
+			},
+			"career-digest-ack": {
+				"enabled": true,
+				"env": {
+					"CAREER_API_BASE_URL": "http://127.0.0.1:18080",
+					"CAREER_API_KEY": "<same-value-as-APP_API_KEY>"
+				}
+			}
+		}
+	}
+}
+```
 
 ## Install locally in OpenClaw
 
