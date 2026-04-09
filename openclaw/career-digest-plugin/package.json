@@ -5,7 +5,8 @@
   "type": "module",
   "description": "OpenClaw plugin exposing compact career digest tools for Java backend integration.",
   "openclaw": {
-    "extensions": ["./index.ts"]
+    "extensions": ["./index.ts"],
+    "type": "plugin"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.0"

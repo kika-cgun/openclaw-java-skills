@@ -48,7 +48,7 @@ services:
       # REST API protection
       APP_API_KEY: ${APP_API_KEY}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null || curl -sf http://localhost:8080/swagger-ui.html"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/v3/api-docs >/dev/null || wget -qO- http://localhost:8080/swagger-ui/index.html >/dev/null || wget -qO- http://localhost:8080/swagger-ui.html >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
